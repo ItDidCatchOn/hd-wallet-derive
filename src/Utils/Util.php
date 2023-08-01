@@ -22,6 +22,8 @@ class Util
     {
         $paramsArray = array( 'key:',
             'coin:',
+            'entropy:',
+            'seed:',
             'mnemonic:',
             'mnemonic-pw:',
             'key-type:',
@@ -31,6 +33,7 @@ class Util
             'includeroot',
             'path:',
             'format:', 'cols:',
+	    'show-input',
             'logfile:', 'loglevel:',
             'list-cols',
             'bch-format:',
@@ -96,10 +99,12 @@ class Util
         $params['gen-key'] = isset($params['gen-key']) || isset($params['gen-words']);
         $params['gen-key-all'] = isset($params['gen-key-all']);  // hidden param, for the truly worthy who read the code.
         $key = @$params['key'];
+        $entropy = @$params['entropy'];
+        $seed = @$params['seed'];
         $mnemonic = @$params['mnemonic'];
 
-        if( !$key && !$mnemonic && !$params['gen-key']) {
-            throw new Exception( "--key or --mnemonic or --gen-key must be specified." );
+        if( !$key && !$entropy && !$seed && !$mnemonic && !$params['gen-key']) {
+            throw new Exception( "--key or --entropy or --seed or --mnemonic or --gen-key must be specified." );
         }
         $params['mnemonic-pw'] = @$params['mnemonic-pw'] ?: null;
         
@@ -119,7 +124,13 @@ class Util
         if( @$params['path'] && @$params['preset']) {
             throw new Exception ("--path and --preset are mutually exclusive");
         }
-        
+
+	if( (@$params['entropy'] && @$params['seed']) || (@$params['entropy'] && @$params['mnemonic']) || (@$params['entropy'] && @$params['key']) ||
+	    (@$params['seed'] && @$params['mnemonic']) || (@$params['seed'] && @$params['key']) || (@$params['mnemonic'] && @$params['key'])
+	) {
+            throw new Exception ("--entropy, --seed, --mnemonic and --key are mutually exclusive");
+	}
+
         if( @$params['preset']) {
             $preset = PathPresets::getPreset($params['preset']);
             $params['path'] = $preset->getPath();
@@ -215,8 +226,15 @@ class Util
     -g                   go!  ( required )
         
     --key=<key>          xpriv or xpub key
+
+    --entropy=<entropy>        hexadecimal entropy
+                           note: either key or entropy or seed or nmemonic is required.
+jjk
+    --seed=<seed>        hexadecimal seed
+                           note: either key or entropy or seed or nmemonic is required.
+                           
     --mnemonic=<words>   bip39 seed words
-                           note: either key or nmemonic is required.
+                           note: either key or entropy or seed or nmemonic is required.
                            
     --mnemonic-pw=<pw>   optional password for mnemonic.
     
@@ -224,7 +242,7 @@ class Util
                             default = auto  (based on key-type)
     
     --key-type=<t>       x | y | z
-                            default = x. applies to --mnemonic only.
+                            default = x.
                             
     --coin=<coin>        Coin Symbol ( default = btc )
                          See --helpcoins for a list.
@@ -259,10 +277,10 @@ class Util
     --path=<path>        bip32 path to derive, relative to provided key (m).
                            ex: "", "m/0", "m/1"
                            default = "m"
-                             if --mnemonic is used, then default is the
+                             if --seed or --mnemonic is used, then default is the
                              bip44 path to extended key, eg m/44'/0'/0'/0
                              which facilitates address derivation from
-                             mnemonic phrase.
+                             seed or mnemonic phrase.
                            note: /x' generates hardened addrs; requires xprv.
                            note: /x is implicit; m/x is equivalent to m.
                            ex: m/0/x'", "m/1/x'"
@@ -287,6 +305,8 @@ class Util
     --gen-words=<n>     num words to generate. implies --gen-key.
                            one of: [$allowed_numwords]
                            default = 24.
+
+    --show-input	print entropy, mnemonic and/or seed depending on the input
     
     --logfile=<file>    path to logfile. if not present logs to stdout.
     --loglevel=<level>  $loglevels

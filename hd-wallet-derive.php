@@ -40,18 +40,17 @@ function main()
         // Creates WalletDerive object
         $walletDerive = new WalletDerive($params);
         if($params['gen-key-all']) {
-            $result = $walletDerive->genRandomKeyForAllChains();
+            $result = $walletDerive->genRandomKeyForAllChains((@$params['entropy']?$params['entropy']:null));
             WalletDeriveReport::printResults($params, $result, true);
             return 0;
         }
         if($params['gen-key']) {
-            $result = $walletDerive->genRandomKeyForNetwork($params['coin']);
+            $result = $walletDerive->genRandomKeyForNetwork($params['coin'], (@$params['entropy']?$params['entropy']:null));
             WalletDeriveReport::printResults($params, $result);
             return 0;
         }
 
-        // Key derived from mnemonic if mnemonic is choosen
-        if( !@$params['key'] && @$params['mnemonic'] && !@$orig_params['path'] && !@$orig_params['preset']) {
+        if(!@$orig_params['path'] && !@$orig_params['preset']) {
             $path = $walletDerive->getCoinBip44ExtKeyPathPurposeByKeyType($params['coin'], $params['key-type']);
             if($path) {
                 $params['path'] = $path;
@@ -61,7 +60,34 @@ function main()
                 throw new Exception(sprintf("Bip32 extended key path unknown because no Bip44 ID found for %s.  You can override by setting --path explicitly.", $params['coin']));
             }
         }
-        $key = @$params['key'] ?: $walletDerive->mnemonicToKey($params['coin'], $params['mnemonic'], $params['key-type'], $params['mnemonic-pw']);
+
+	if(!@$params['key']) {
+
+            if(@$params['entropy']) {
+		$data = $walletDerive->genRandomSeed($params['mnemonic-pw'], $params['entropy']);
+		$key = $walletDerive->hexSeedToKey($params['coin'], $data['seed']->getHex(), $params['key-type']);
+
+	    } elseif(@$params['seed']) {
+
+	        if(isset($params['show-input'])) {
+	            printf("Seed is\n%s\n", $params['seed']);
+	        }
+                $key = $walletDerive->hexSeedToKey($params['coin'], $params['seed'], $params['key-type']);
+	    } else {
+
+	        if(isset($params['show-input'])) {
+	            printf("Mnemonic is\n'%s'\nMnemonic password is\n'%s'\n", $params['mnemonic'], $params['mnemonic-pw']);
+	        }
+		$key = $walletDerive->mnemonicToKey($params['coin'], $params['mnemonic'], $params['key-type'], $params['mnemonic-pw']);
+	    }
+
+	} else {
+		$key = $params['key'];
+	}
+
+	if(isset($params['show-input'])) {
+	    printf("Key is\n%s\n", $key);
+	}
         $addrs = $walletDerive->derive_keys($key);
 
         // Prints result

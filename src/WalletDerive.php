@@ -396,6 +396,11 @@ class WalletDerive
         // Derive a seed from mnemonic/password
         $password = $password === null ? '' : $password;
         $seed = $seedGenerator->getSeed($mnemonic, $password);
+        $params = $this->get_params();
+
+	if(isset($params['show-input'])) {
+	    printf("Seed is\n%s\n", $seed->getHex());
+	}
         
         $scriptFactory = $this->getScriptDataFactoryForKeyType($key_type);
 
@@ -403,14 +408,44 @@ class WalletDerive
         return $this->toExtendedKey($coin, $bip32, $network, $key_type );
     }
     
-    protected function genRandomSeed($password=null) {
+    // converts a hex seed string to an xprv key (string).
+    public function hexSeedToKey($coin, $hex_seed, $key_type)
+    {
+        $networkCoinFactory = new NetworkCoinFactory();
+        $network = $networkCoinFactory->getNetworkCoinInstance($coin);
+        Bitcoin::setNetwork($network);
+        
+        $seedGenerator = new Bip39SeedGenerator();
+        $params = $this->get_params();
+
+        // Derive a seed from mnemonic/password
+        $seed = Buffer::hex($hex_seed);
+        
+        $scriptFactory = $this->getScriptDataFactoryForKeyType($key_type);
+
+        $bip32 = $this->hkf->fromEntropy($seed, $scriptFactory);
+        return $this->toExtendedKey($coin, $bip32, $network, $key_type );
+    }
+    
+    public function genRandomSeed($password=null, $hex_entropy=null) {
         $params = $this->get_params();
         $num_bytes = (int)($params['gen-words'] / 0.75);
         
         // generate random mnemonic
-        $random = new Random();
         $bip39 = MnemonicFactory::bip39();
-        $entropy = $random->bytes($num_bytes);
+
+	if($hex_entropy == null) {
+            $random = new Random();
+            $entropy = $random->bytes($num_bytes);
+
+	} else {
+            $entropy = Buffer::hex($hex_entropy)->slice(0, $num_bytes);
+
+	    if($entropy->getSize() < $num_bytes) {
+                throw new Exception(sprintf("The length of the provided entropy (%) is shorter than required (%i)", $entropy->getSize(), $num_bytes));
+	    }
+            $entropy = $entropy->slice(0, $num_bytes);
+	}
         $mnemonic = $bip39->entropyToMnemonic($entropy);
 
         // generate seed and master priv key from mnemonic
@@ -418,9 +453,15 @@ class WalletDerive
         $pw = $password == null ? '' : $password;
         $seed = $seedGenerator->getSeed($mnemonic, $pw);
 
+	if(isset($params['show-input'])) {
+	    printf("Entropy is\n%s\n", $entropy->getHex());
+	    printf("Mnemonic is\n'%s'\nMnemonic password is\n'%s'\n", $mnemonic, $pw);
+	    printf("Seed is\n%s\n", $seed->getHex());
+	}
+
         $data = [
-            'seed' => $seed,
             'mnemonic' => $mnemonic,
+            'seed' => $seed
         ];
         
         return $data;
@@ -482,13 +523,13 @@ class WalletDerive
         return $rows;
     }
     
-    public function genRandomKeyForNetwork($coin) {
-        $seedinfo = $this->genRandomSeed();
+    public function genRandomKeyForNetwork($coin, $entropy=null) {
+        $seedinfo = $this->genRandomSeed(null, $entropy);
         return $this->genKeysFromSeed($coin, $seedinfo);
     }
     
-    public function genRandomKeyForAllChains() {
-        $seedinfo = $this->genRandomSeed();
+    public function genRandomKeyForAllChains($entropy=null) {
+        $seedinfo = $this->genRandomSeed(null, $entropy);
         
         $allcoins = NetworkCoinFactory::getNetworkCoinsList();
         $rows = [];
